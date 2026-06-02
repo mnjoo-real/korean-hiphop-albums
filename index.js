@@ -7,19 +7,80 @@ const albumArtist = document.querySelector('.album-artist');
 const albumYear = document.querySelector('.album-year');
 const whatToShowSelect = document.querySelector('#what-to-show');
 const appBgVideo = document.querySelector('.app-bg-video');
-const appBgVideoSource = appBgVideo?.querySelector('source') || null;
 const appBgYoutube = document.querySelector('.app-bg-youtube');
 const subtitleYoutubeLink = document.querySelector('.subtitle-youtube-link');
 const DEFAULT_SUBTITLE_YOUTUBE_LINK = 'https://youtube.com/channel/UCGpAOvZxEMF_y3KO_FLnDXA?si=2deG9W-YqOODW6zY';
-const BACKGROUND_VIDEO_BY_OPTION = {
-  standard1: 'assets/bg/130606 JUSTJAM vol.9 __ Beenzino - Aqua man.mp4',
-  standard2: 'assets/bg/2023.05.28 Smoking Dreams  _ BEENZINO (서울재즈페스티벌 ).mp4',
-  standard3: 'assets/bg/140621 일리네어 레코즈 콘서트__ ILLIONAIRE RECORDS - 가.mp4',
-  standard4: 'assets/bg/[SMTM127회 풀버전] Team J-Tong X Hukky Shibaseki @프로듀서 공연.mp4',
+const BACKGROUND_YOUTUBE_BY_OPTION = {
+  standard1: '8pHvK0Tp8bk',
+  standard2: 'CRQCqse7Sxo',
+  standard3: 'Od_PZx4RNac',
+  standard4: 'UbVguQ92Qxs',
 };
 const BACKGROUND_YOUTUBE_BY_ALBUM_ID = {
   1: 'TZquZFXS9Zk',
   20: 'cWINhE5EEkY',
+};
+let youtubeIframeApiPromise = null;
+const youtubePlayerByIframe = new WeakMap();
+
+const getYoutubeOriginParam = () => {
+  if (!window.location.origin || window.location.origin === 'null') return '';
+  return window.location.origin;
+};
+
+const buildYoutubeEmbedUrl = (videoId, options = {}) => {
+  const encodedVideoId = encodeURIComponent(videoId);
+  const params = new URLSearchParams({
+    rel: '0',
+    playsinline: '1',
+    enablejsapi: '1',
+    ...options,
+  });
+  const origin = getYoutubeOriginParam();
+  if (origin) params.set('origin', origin);
+
+  return `https://www.youtube.com/embed/${encodedVideoId}?${params.toString()}`;
+};
+
+const loadYoutubeIframeApi = () => {
+  if (window.YT?.Player) return Promise.resolve(window.YT);
+  if (youtubeIframeApiPromise) return youtubeIframeApiPromise;
+
+  youtubeIframeApiPromise = new Promise((resolve) => {
+    const previousCallback = window.onYouTubeIframeAPIReady;
+    window.onYouTubeIframeAPIReady = () => {
+      if (typeof previousCallback === 'function') previousCallback();
+      resolve(window.YT);
+    };
+
+    const existingScript = document.querySelector('script[src="https://www.youtube.com/iframe_api"]');
+    if (!existingScript) {
+      const script = document.createElement('script');
+      script.src = 'https://www.youtube.com/iframe_api';
+      document.head.appendChild(script);
+    }
+  });
+
+  return youtubeIframeApiPromise;
+};
+
+const getYoutubePlayer = async (iframe) => {
+  if (!iframe) return null;
+
+  let playerPromise = youtubePlayerByIframe.get(iframe);
+  if (!playerPromise) {
+    playerPromise = loadYoutubeIframeApi().then((YT) => new Promise((resolve) => {
+      let player = null;
+      player = new YT.Player(iframe, {
+        events: {
+          onReady: () => resolve(player),
+        },
+      });
+    }));
+    youtubePlayerByIframe.set(iframe, playerPromise);
+  }
+
+  return playerPromise;
 };
 
 const syncSubtitleYoutubeLink = () => {
@@ -31,55 +92,27 @@ const syncSubtitleYoutubeLink = () => {
     : DEFAULT_SUBTITLE_YOUTUBE_LINK;
 };
 
-const syncBackgroundVideoBySelection = () => {
-  if (!whatToShowSelect || !appBgVideo) return;
-
-  const nextVideoSrc = BACKGROUND_VIDEO_BY_OPTION[whatToShowSelect.value];
-  if (!nextVideoSrc) return;
-
-  const currentVideoSrc = appBgVideoSource
-    ? (appBgVideoSource.getAttribute('src') || '')
-    : (appBgVideo.getAttribute('src') || '');
-
-  if (currentVideoSrc === nextVideoSrc) return;
-
-  if (appBgVideoSource) {
-    appBgVideoSource.setAttribute('src', nextVideoSrc);
-    appBgVideo.load();
-  } else {
-    appBgVideo.setAttribute('src', nextVideoSrc);
-  }
-
-  const playPromise = appBgVideo.play();
-  if (playPromise && typeof playPromise.catch === 'function') {
-    playPromise.catch(() => {});
-  }
-};
-
 const getBackgroundYoutubeEmbedUrl = (videoId) => {
-  const encodedVideoId = encodeURIComponent(videoId);
-  const params = new URLSearchParams({
+  return buildYoutubeEmbedUrl(videoId, {
     autoplay: '1',
     mute: '1',
     controls: '0',
-    playsinline: '1',
     loop: '1',
     playlist: videoId,
-    rel: '0',
     modestbranding: '1',
     disablekb: '1',
     fs: '0',
     iv_load_policy: '3',
   });
-
-  return `https://www.youtube.com/embed/${encodedVideoId}?${params.toString()}`;
 };
 
 const restoreLocalBackgroundVideo = () => {
   if (!appBgYoutube || !appBgVideo) return;
 
+  youtubePlayerByIframe.delete(appBgYoutube);
   appBgYoutube.src = 'about:blank';
   appBgYoutube.hidden = true;
+  document.body.classList.remove('is-bg-card-youtube-active');
   appBgVideo.classList.remove('is-hidden');
 
   const playPromise = appBgVideo.play();
@@ -88,10 +121,9 @@ const restoreLocalBackgroundVideo = () => {
   }
 };
 
-const syncBackgroundYoutubeByAlbumId = (albumId) => {
+const setBackgroundYoutube = (videoId, { reduceDim = false } = {}) => {
   if (!appBgYoutube || !appBgVideo) return;
 
-  const videoId = BACKGROUND_YOUTUBE_BY_ALBUM_ID[String(albumId)];
   if (!videoId) {
     restoreLocalBackgroundVideo();
     return;
@@ -99,12 +131,29 @@ const syncBackgroundYoutubeByAlbumId = (albumId) => {
 
   const nextSrc = getBackgroundYoutubeEmbedUrl(videoId);
   if (appBgYoutube.src !== nextSrc) {
+    youtubePlayerByIframe.delete(appBgYoutube);
     appBgYoutube.src = nextSrc;
   }
 
   appBgYoutube.hidden = false;
+  document.body.classList.toggle('is-bg-card-youtube-active', reduceDim);
   appBgVideo.pause();
   appBgVideo.classList.add('is-hidden');
+};
+
+const syncBackgroundYoutubeBySelection = () => {
+  if (!whatToShowSelect) return;
+  setBackgroundYoutube(BACKGROUND_YOUTUBE_BY_OPTION[whatToShowSelect.value]);
+};
+
+const syncBackgroundYoutubeByAlbumId = (albumId) => {
+  const videoId = BACKGROUND_YOUTUBE_BY_ALBUM_ID[String(albumId)];
+  if (!videoId) {
+    syncBackgroundYoutubeBySelection();
+    return;
+  }
+
+  setBackgroundYoutube(videoId, { reduceDim: true });
 };
 
 const setHeavyBackgroundBlur = (enabled) => {
@@ -123,7 +172,7 @@ const setAlbumInfo = (album) => {
 const getYoutubeEmbedUrl = (album) => {
   const videoId = album?.youtube?.videoId ? String(album.youtube.videoId).trim() : '';
   if (!videoId) return '';
-  return `https://www.youtube.com/embed/${encodeURIComponent(videoId)}?rel=0`;
+  return buildYoutubeEmbedUrl(videoId);
 };
 
 const buildCard = (album, cloneType = '') => {
@@ -178,6 +227,8 @@ const getCardSize = () => {
 const initCarousel = (albums) => {
   if (!cardContainer || !prevButton || !nextButton || albums.length === 0) return;
   let isPlaying = false;
+  let backgroundSyncTimer = null;
+  let backgroundSyncRunId = 0;
 
   cardContainer.innerHTML = '';
 
@@ -210,8 +261,52 @@ const initCarousel = (albums) => {
     }
     setHeavyBackgroundBlur(isPlaying);
     if (!isPlaying) {
-      restoreLocalBackgroundVideo();
+      syncBackgroundYoutubeBySelection();
     }
+  };
+
+  const stopBackgroundSync = () => {
+    backgroundSyncRunId += 1;
+    if (backgroundSyncTimer) {
+      window.clearInterval(backgroundSyncTimer);
+      backgroundSyncTimer = null;
+    }
+  };
+
+  const startBackgroundSync = async (cardIframe) => {
+    stopBackgroundSync();
+    const syncRunId = backgroundSyncRunId;
+    if (!cardIframe || !appBgYoutube || appBgYoutube.hidden) return;
+
+    const [cardPlayer, backgroundPlayer] = await Promise.all([
+      getYoutubePlayer(cardIframe),
+      getYoutubePlayer(appBgYoutube),
+    ]);
+    if (syncRunId !== backgroundSyncRunId || appBgYoutube.hidden) return;
+    if (!cardPlayer || !backgroundPlayer) return;
+
+    const syncPlayers = () => {
+      const cardTime = cardPlayer.getCurrentTime?.();
+      const backgroundTime = backgroundPlayer.getCurrentTime?.();
+      if (!Number.isFinite(cardTime) || !Number.isFinite(backgroundTime)) return;
+
+      if (Math.abs(cardTime - backgroundTime) > 0.35) {
+        backgroundPlayer.seekTo(cardTime, true);
+      }
+
+      const cardState = cardPlayer.getPlayerState?.();
+      const backgroundState = backgroundPlayer.getPlayerState?.();
+
+      if (cardState === 1 && backgroundState !== 1) {
+        backgroundPlayer.mute?.();
+        backgroundPlayer.playVideo?.();
+      } else if ((cardState === 0 || cardState === 2) && backgroundState === 1) {
+        backgroundPlayer.pauseVideo?.();
+      }
+    };
+
+    syncPlayers();
+    backgroundSyncTimer = window.setInterval(syncPlayers, 700);
   };
 
   const createOrUpdateYoutubeIframe = (cardBack, autoplay = false) => {
@@ -270,12 +365,14 @@ const initCarousel = (albums) => {
     }
 
     const willPlay = !centeredCard.classList.contains('is-flipped');
+    stopBackgroundSync();
     resetFlips();
     centeredCard.classList.toggle('is-flipped', willPlay);
 
     if (willPlay) {
-      createOrUpdateYoutubeIframe(cardBack, true);
+      const cardIframe = createOrUpdateYoutubeIframe(cardBack, true);
       syncBackgroundYoutubeByAlbumId(centeredCard.dataset.id);
+      startBackgroundSync(cardIframe);
     } else {
       destroyYoutubeIframe(centeredCard);
     }
@@ -358,6 +455,9 @@ const initCarousel = (albums) => {
       setAlbumInfo(centeredAlbum);
     }
     resetFlips(centeredCard.classList.contains('is-flipped') ? centeredCard : null);
+    if (!centeredCard.classList.contains('is-flipped')) {
+      stopBackgroundSync();
+    }
     setPlaybackState(centeredCard.classList.contains('is-flipped'));
   };
 
@@ -427,12 +527,11 @@ const bootstrap = async () => {
   try {
     if (whatToShowSelect) {
       whatToShowSelect.addEventListener('change', () => {
-        restoreLocalBackgroundVideo();
         syncSubtitleYoutubeLink();
-        syncBackgroundVideoBySelection();
+        syncBackgroundYoutubeBySelection();
       });
       syncSubtitleYoutubeLink();
-      syncBackgroundVideoBySelection();
+      syncBackgroundYoutubeBySelection();
     }
 
     const response = await fetch('./best50albums.json');

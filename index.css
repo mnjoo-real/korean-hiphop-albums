@@ -8,6 +8,7 @@ body {
     position: relative;
     isolation: isolate;
     --app-bg-image: url('assets/bg/bg7.png');
+    --app-bg-youtube-scale: 1.12;
     background: #000;
 }
 
@@ -37,7 +38,7 @@ body {
     width: max(100vw, 177.78vh);
     height: max(56.25vw, 100vh);
     border: 0;
-    transform: translate(-50%, -50%) scale(1.02);
+    transform: translate(-50%, -50%) scale(var(--app-bg-youtube-scale));
 }
 
 body::before {
@@ -47,6 +48,11 @@ body::before {
     z-index: 1;
     pointer-events: none;
     background: linear-gradient(rgba(0, 0, 0, 0.38), rgba(0, 0, 0, 0.38));
+    transition: background 500ms ease;
+}
+
+body.is-bg-card-youtube-active::before {
+    background: linear-gradient(rgba(0, 0, 0, 0.22), rgba(0, 0, 0, 0.22));
 }
 
 body.is-bg-blurred .app-bg-video,
@@ -59,7 +65,7 @@ body.is-bg-blurred .app-bg-video {
 }
 
 body.is-bg-blurred .app-bg-youtube {
-    transform: translate(-50%, -50%) scale(1.18);
+    transform: translate(-50%, -50%) scale(var(--app-bg-youtube-scale));
 }
 
 body > :not(.app-bg-video):not(.app-bg-youtube) {
