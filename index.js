@@ -8,6 +8,7 @@ const albumYear = document.querySelector('.album-year');
 const whatToShowSelect = document.querySelector('#what-to-show');
 const appBgVideo = document.querySelector('.app-bg-video');
 const appBgVideoSource = appBgVideo?.querySelector('source') || null;
+const appBgYoutube = document.querySelector('.app-bg-youtube');
 const subtitleYoutubeLink = document.querySelector('.subtitle-youtube-link');
 const DEFAULT_SUBTITLE_YOUTUBE_LINK = 'https://youtube.com/channel/UCGpAOvZxEMF_y3KO_FLnDXA?si=2deG9W-YqOODW6zY';
 const BACKGROUND_VIDEO_BY_OPTION = {
@@ -15,6 +16,10 @@ const BACKGROUND_VIDEO_BY_OPTION = {
   standard2: 'assets/bg/2023.05.28 Smoking Dreams  _ BEENZINO (서울재즈페스티벌 ).mp4',
   standard3: 'assets/bg/140621 일리네어 레코즈 콘서트__ ILLIONAIRE RECORDS - 가.mp4',
   standard4: 'assets/bg/[SMTM127회 풀버전] Team J-Tong X Hukky Shibaseki @프로듀서 공연.mp4',
+};
+const BACKGROUND_YOUTUBE_BY_ALBUM_ID = {
+  1: 'TZquZFXS9Zk',
+  20: 'cWINhE5EEkY',
 };
 
 const syncSubtitleYoutubeLink = () => {
@@ -49,6 +54,57 @@ const syncBackgroundVideoBySelection = () => {
   if (playPromise && typeof playPromise.catch === 'function') {
     playPromise.catch(() => {});
   }
+};
+
+const getBackgroundYoutubeEmbedUrl = (videoId) => {
+  const encodedVideoId = encodeURIComponent(videoId);
+  const params = new URLSearchParams({
+    autoplay: '1',
+    mute: '1',
+    controls: '0',
+    playsinline: '1',
+    loop: '1',
+    playlist: videoId,
+    rel: '0',
+    modestbranding: '1',
+    disablekb: '1',
+    fs: '0',
+    iv_load_policy: '3',
+  });
+
+  return `https://www.youtube.com/embed/${encodedVideoId}?${params.toString()}`;
+};
+
+const restoreLocalBackgroundVideo = () => {
+  if (!appBgYoutube || !appBgVideo) return;
+
+  appBgYoutube.src = 'about:blank';
+  appBgYoutube.hidden = true;
+  appBgVideo.classList.remove('is-hidden');
+
+  const playPromise = appBgVideo.play();
+  if (playPromise && typeof playPromise.catch === 'function') {
+    playPromise.catch(() => {});
+  }
+};
+
+const syncBackgroundYoutubeByAlbumId = (albumId) => {
+  if (!appBgYoutube || !appBgVideo) return;
+
+  const videoId = BACKGROUND_YOUTUBE_BY_ALBUM_ID[String(albumId)];
+  if (!videoId) {
+    restoreLocalBackgroundVideo();
+    return;
+  }
+
+  const nextSrc = getBackgroundYoutubeEmbedUrl(videoId);
+  if (appBgYoutube.src !== nextSrc) {
+    appBgYoutube.src = nextSrc;
+  }
+
+  appBgYoutube.hidden = false;
+  appBgVideo.pause();
+  appBgVideo.classList.add('is-hidden');
 };
 
 const setHeavyBackgroundBlur = (enabled) => {
@@ -153,6 +209,9 @@ const initCarousel = (albums) => {
       playPauseButton.textContent = isPlaying ? 'II' : '▶';
     }
     setHeavyBackgroundBlur(isPlaying);
+    if (!isPlaying) {
+      restoreLocalBackgroundVideo();
+    }
   };
 
   const createOrUpdateYoutubeIframe = (cardBack, autoplay = false) => {
@@ -216,6 +275,7 @@ const initCarousel = (albums) => {
 
     if (willPlay) {
       createOrUpdateYoutubeIframe(cardBack, true);
+      syncBackgroundYoutubeByAlbumId(centeredCard.dataset.id);
     } else {
       destroyYoutubeIframe(centeredCard);
     }
@@ -367,6 +427,7 @@ const bootstrap = async () => {
   try {
     if (whatToShowSelect) {
       whatToShowSelect.addEventListener('change', () => {
+        restoreLocalBackgroundVideo();
         syncSubtitleYoutubeLink();
         syncBackgroundVideoBySelection();
       });

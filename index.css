@@ -11,16 +11,33 @@ body {
     background: #000;
 }
 
-.app-bg-video {
+.app-bg-video,
+.app-bg-youtube {
     position: fixed;
     inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    transition: filter 500ms ease, transform 500ms ease, opacity 500ms ease;
+}
+
+.app-bg-video {
     width: 100%;
     height: 100%;
     object-fit: cover;
-    z-index: 0;
-    pointer-events: none;
     transform: scale(1.02);
-    transition: filter 500ms ease, transform 500ms ease;
+}
+
+.app-bg-video.is-hidden {
+    opacity: 0;
+}
+
+.app-bg-youtube {
+    top: 50%;
+    left: 50%;
+    width: max(100vw, 177.78vh);
+    height: max(56.25vw, 100vh);
+    border: 0;
+    transform: translate(-50%, -50%) scale(1.02);
 }
 
 body::before {
@@ -32,12 +49,20 @@ body::before {
     background: linear-gradient(rgba(0, 0, 0, 0.38), rgba(0, 0, 0, 0.38));
 }
 
-body.is-bg-blurred .app-bg-video {
+body.is-bg-blurred .app-bg-video,
+body.is-bg-blurred .app-bg-youtube {
     filter: blur(28px);
+}
+
+body.is-bg-blurred .app-bg-video {
     transform: scale(1.18);
 }
 
-body > :not(.app-bg-video) {
+body.is-bg-blurred .app-bg-youtube {
+    transform: translate(-50%, -50%) scale(1.18);
+}
+
+body > :not(.app-bg-video):not(.app-bg-youtube) {
     position: relative;
     z-index: 2;
 }
